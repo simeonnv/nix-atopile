@@ -1,0 +1,70 @@
+name: update
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      pr: ${{ steps.pr.outputs.pull-request-number }}
+      operation: ${{ steps.pr.outputs.pull-request-operation }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - id: update
+        run: |
+          version=$(curl -fsSL https://pypi.org/pypi/atopile/json | jq -r .info.version)
+          sed -i "s/\"atopile==[^\"]*\"/\"atopile==$version\"/" pyproject.toml
+          nix shell nixpkgs#uv nixpkgs#python314 -c sh -c 'uv lock --python "$(command -v python3.14)" --upgrade-package atopile'
+          nix flake update
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+        env:
+          UV_PYTHON_DOWNLOADS: never
+      - id: pr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: auto-update
+          delete-branch: true
+          commit-message: "chore: update atopile to ${{ steps.update.outputs.version }}"
+          title: "chore: update atopile to ${{ steps.update.outputs.version }}"
+          body: |
+            Automated update of the atopile pin, `uv.lock` and `flake.lock`.
+            Merged automatically once the build succeeds on Linux and macOS.
+          labels: automated
+
+  check:
+    needs: update
+    if: needs.update.outputs.pr != '' && needs.update.outputs.operation != 'closed'
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: auto-update
+      - uses: cachix/install-nix-action@v31
+      - run: nix build -L
+      - run: ./result/bin/ato --version
+
+  merge:
+    needs: [update, check]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - run: gh pr merge "${{ needs.update.outputs.pr }}" --repo "$GITHUB_REPOSITORY" --squash --delete-branch
+        env:
+          GH_TOKEN: ${{ github.token }}
