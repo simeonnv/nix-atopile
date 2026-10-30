@@ -17,7 +17,14 @@
     lib.composeManyExtensions [
       pyproject-build-systems.overlays.wheel
       (workspace.mkPyprojectOverlay {sourcePreference = "wheel";})
-      (final: prev: {
+      (final: prev: let
+        withSetuptools = name:
+          prev.${name}.overrideAttrs (old: {
+            nativeBuildInputs = (old.nativeBuildInputs or []) ++ final.resolveBuildSystem {setuptools = [];};
+          });
+      in {
+        watchdog = withSetuptools "watchdog";
+        zstd = withSetuptools "zstd";
         atopile = prev.atopile.overrideAttrs (old: {
           postInstall =
             (old.postInstall or "")
