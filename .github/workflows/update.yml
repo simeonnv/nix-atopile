@@ -35,8 +35,8 @@ jobs:
         with:
           branch: auto-update
           delete-branch: true
-          commit-message: "chore: update atopile to ${{ steps.update.outputs.version }}"
-          title: "chore: update atopile to ${{ steps.update.outputs.version }}"
+          commit-message: "update atopile to ${{ steps.update.outputs.version }}"
+          title: "update atopile to ${{ steps.update.outputs.version }}"
           body: |
             Automated update of the atopile pin, `uv.lock` and `flake.lock`.
             Merged automatically once the build succeeds on Linux and macOS.
